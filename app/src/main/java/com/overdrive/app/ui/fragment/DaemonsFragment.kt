@@ -18,11 +18,14 @@ import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.overdrive.app.ui.adapter.DaemonAdapter
 import com.overdrive.app.ui.viewmodel.DaemonsViewModel
 import com.overdrive.app.ui.model.DaemonType
 import com.overdrive.app.R
 import com.overdrive.app.ui.model.DaemonStatus
+import com.overdrive.app.ui.util.PreferencesManager
 import com.overdrive.app.ui.util.QrCodeGenerator
 
 /**
@@ -118,6 +121,8 @@ class DaemonsFragment : Fragment() {
         when (type) {
             DaemonType.ZROK_TUNNEL -> showZrokTokenDialog()
             DaemonType.TAILSCALE_TUNNEL -> showTailscaleSettingsDialog()
+            DaemonType.CLOUDFLARED_TUNNEL -> showCloudflaredSettingsDialog()
+
             else -> {
                 // Other daemons don't need configuration yet
                 Toast.makeText(context, getString(R.string.toast_no_config_needed, type.displayName), Toast.LENGTH_SHORT).show()
@@ -167,6 +172,53 @@ class DaemonsFragment : Fragment() {
                 dialog.show()
             }
         }
+    }
+
+    /**
+     * Show dialog to configure Cloudflared.
+     */
+    private fun showCloudflaredSettingsDialog() {
+        val context = context ?: return
+
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_cloudflared_settings, null)
+        val etToken = dialogView.findViewById<TextInputEditText>(R.id.etCloudflareToken)
+        val swPaid = dialogView.findViewById<SwitchMaterial>(R.id.swCloudflarePaid)
+        val tilToken = dialogView.findViewById<TextInputLayout>(R.id.tilCloudflareToken)
+
+        // Load current values
+        val isPaid = PreferencesManager.isCloudflarePaid()
+        swPaid.isChecked = isPaid
+        etToken.setText(PreferencesManager.getCloudflareToken())
+
+        // Initial state
+        tilToken.isEnabled = isPaid
+
+        swPaid.setOnCheckedChangeListener { _, isChecked ->
+            tilToken.isEnabled = isChecked
+        }
+
+        AlertDialog.Builder(context, R.style.Theme_Overdrive_M3_Dialog)
+            .setTitle(getString(R.string.dialog_cloudflared_settings_title))
+            .setMessage(getString(R.string.dialog_cloudflared_settings_message))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.dialog_save)) { _, _ ->
+                val paid = swPaid.isChecked
+                val token = etToken.text?.toString()?.trim() ?: ""
+
+                PreferencesManager.setCloudflarePaid(paid)
+                PreferencesManager.setCloudflareToken(token)
+
+                if (paid && token.isEmpty()) {
+                    Toast.makeText(context, getString(R.string.toast_cloudflared_token_cannot_be_empty), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, getString(R.string.toast_cloudflared_saved_settings), Toast.LENGTH_SHORT).show()
+                }
+
+                // Refresh state to update "needs configuration" indicator
+                daemonsViewModel.refreshDaemonStatus(DaemonType.CLOUDFLARED_TUNNEL)
+            }
+            .setNegativeButton(getString(R.string.action_cancel), null)
+            .show()
     }
 
     /**

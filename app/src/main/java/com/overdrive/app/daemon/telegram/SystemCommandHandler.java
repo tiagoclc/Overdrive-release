@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import com.overdrive.app.ui.util.PreferencesManager;
+
 
 /**
  * Handles system commands: /daemons, /url, /help
@@ -110,13 +112,25 @@ public class SystemCommandHandler implements TelegramCommandHandler {
             sb.append("🌐 *Tunnel URLs*\n\n");
             int resolved = 0;
             int pending = 0;
+            boolean isPaid = PreferencesManager.isCloudflarePaid();
+            String token = PreferencesManager.getCloudflareToken();
 
             if (cfUp) {
                 String url = null;
-                String grepResult = ctx.execShell("grep -o 'https://[a-z0-9-]*\\.trycloudflare\\.com' /data/local/tmp/cloudflared.log 2>/dev/null | grep -v 'api\\.' | head -1");
-                if (grepResult != null && grepResult.startsWith("https://") && grepResult.contains("-")) {
-                    url = grepResult.trim();
+
+                if (isPaid && !token.isEmpty()) {
+                    String grepResult = ctx.execShell("grep --line-buffered -iE 'ingress|hostname' /data/local/tmp/cloudflared.log 2>>/dev/null | grep --line-buffered -oE '[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}' | grep -vE '127.0.0.1' | tail -1");
+                    if (grepResult != null) {
+                        url = "https://" + grepResult.trim();
+                    }
+                }else{
+                    String grepResult = ctx.execShell("grep -o 'https://[a-z0-9-]*\\.trycloudflare\\.com' /data/local/tmp/cloudflared.log 2>/dev/null | grep -v 'api\\.' | head -1");
+                    if (grepResult != null && grepResult.startsWith("https://") && grepResult.contains("-")) {
+                        url = grepResult.trim();
+                    }
                 }
+                // Save URL to file for /url command
+
                 if (url != null) {
                     sb.append("• *Cloudflared:* ").append(url).append("\n");
                     resolved++;
